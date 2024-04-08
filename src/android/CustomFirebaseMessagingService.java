@@ -1,11 +1,10 @@
-package com.androidfcm.cordova;
-
-import com.google.firebase.messaging.FirebaseMessagingService;
+package org.apache.cordova.firebase;
+import org.apache.cordova.firebase.FirebasePluginMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 import android.util.Log;
 import java.util.Map;
 
-public class CustomFirebaseMessagingService extends FirebaseMessagingService {
+public class CustomFirebaseMessagingService extends FirebasePluginMessagingService {
     private static final String TAG = "custom-fcm-service";
 
     static boolean includesWebEngage() {
