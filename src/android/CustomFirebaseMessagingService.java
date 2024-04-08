@@ -32,7 +32,7 @@ public class CustomFirebaseMessagingService extends FirebaseMessagingService {
                 }
             }
             else {
-                super.onMessageReceived(remoteMessage)
+                super.onMessageReceived(remoteMessage);
                
             }
         }
