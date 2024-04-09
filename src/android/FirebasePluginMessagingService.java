@@ -48,6 +48,22 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
     static final String imageTypeCircle = "circle";
     static final String imageTypeBigPicture = "big_picture";
 
+    
+
+    static boolean includesWebEngage() {
+        try {
+            Class.forName("com.webengage.sdk.android.WebEngage");
+            return true;
+        } catch (ClassNotFoundException e) {
+            Log.e(TAG, "WebEngage Not Found", e);
+        } catch (Throwable t) {
+            Log.e(TAG, "Error while checking for WebEngage", t);
+        }
+        return false;
+    }
+
+
+
     /**
      * Called if InstanceID token is updated. This may occur if the security of
      * the previous token had been compromised. Note that this is called when the InstanceID token
@@ -58,13 +74,21 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
         try{
             super.onNewToken(refreshedToken);
             Log.d(TAG, "Refreshed token: " + refreshedToken);
-            FirebasePlugin.sendToken(refreshedToken);
+            
+            if (includesWebEngage()) {
+                com.webengage.sdk.android.WebEngage.get().setRegistrationID(refreshedToken);
+            }
+            else
+            {
+                FirebasePlugin.sendToken(refreshedToken);
+            }
         }catch (Exception e){
             FirebasePlugin.handleExceptionWithoutContext(e);
         }
     }
 
     public Bitmap getBitmapFromURL(String strURL) {
+
         try {
             URL url = new URL(strURL);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -102,127 +126,145 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
             // [END_EXCLUDE]
 
             // Pass the message to the receiver manager so any registered receivers can decide to handle it
-            boolean wasHandled = FirebasePluginMessageReceiverManager.onMessageReceived(remoteMessage);
-            if (wasHandled) {
-                Log.d(TAG, "Message was handled by a registered receiver");
-
-                // Don't process the message in this method.
-                return;
-            }
-
-            if(FirebasePlugin.applicationContext == null){
-                FirebasePlugin.applicationContext = this.getApplicationContext();
-            }
-
-            // TODO(developer): Handle FCM messages here.
-            // Not getting messages here? See why this may be: https://goo.gl/39bRNJ
-            String messageType;
-            String title = null;
-            String titleLocKey = null;
-            String[] titleLocArgs = null;
-            String body = null;
-            String bodyLocKey = null;
-            String[] bodyLocArgs = null;
-            String bodyHtml = null;
-            String id = null;
-            String sound = null;
-            String vibrate = null;
-            String light = null;
-            String color = null;
-            String icon = null;
-            String channelId = null;
-            String visibility = null;
-            String priority = null;
-            String image = null;
-            String imageType = null;
-            boolean foregroundNotification = false;
-
             Map<String, String> data = remoteMessage.getData();
-
-            if (remoteMessage.getNotification() != null) {
-                // Notification message payload
-                Log.i(TAG, "Received message: notification");
-                messageType = "notification";
-                id = remoteMessage.getMessageId();
-                RemoteMessage.Notification notification = remoteMessage.getNotification();
-                title = notification.getTitle();
-                titleLocKey = notification.getTitleLocalizationKey();
-                titleLocArgs = notification.getTitleLocalizationArgs();
-                body = notification.getBody();
-                bodyLocKey = notification.getBodyLocalizationKey();
-                bodyLocArgs = notification.getBodyLocalizationArgs();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    channelId = notification.getChannelId();
-                }
-                sound = notification.getSound();
-                color = notification.getColor();
-                icon = notification.getIcon();
-                if (notification.getImageUrl() != null) {
-                    image = notification.getImageUrl().toString();
-                }
-                if (!TextUtils.isEmpty(titleLocKey)) {
-                    int titleId = getResources().getIdentifier(titleLocKey, "string", getPackageName());
-                    title = String.format(getResources().getString(titleId), (Object[])titleLocArgs);
-                }
-                if (!TextUtils.isEmpty(bodyLocKey)) {
-                    int bodyId = getResources().getIdentifier(bodyLocKey, "string", getPackageName());
-                    body = String.format(getResources().getString(bodyId), (Object[])bodyLocArgs);
-                }
-            }else{
-                Log.i(TAG, "Received message: data");
-                messageType = "data";
-            }
-
             if (data != null) {
-                // Data message payload
-                if(data.containsKey("notification_foreground")){
-                    foregroundNotification = true;
+                if (includesWebEngage()) {
+                    com.webengage.sdk.android.WebEngage.engage(getApplicationContext());
+                    if (data.containsKey("source") && "webengage".equals(data.get("source"))) {
+                        com.webengage.sdk.android.WebEngage.get().receive(data);
+                    }
+                    else{
+                        firebasexHandler(remoteMessage);
+                    }
                 }
-                if(data.containsKey("notification_title")) title = data.get("notification_title");
-                if(data.containsKey("notification_body")) body = data.get("notification_body");
-                if(data.containsKey("notification_android_body_html")) bodyHtml = data.get("notification_android_body_html");
-                if(data.containsKey("notification_android_channel_id")) channelId = data.get("notification_android_channel_id");
-                if(data.containsKey("notification_android_id")) id = data.get("notification_android_id");
-                if(data.containsKey("notification_android_sound")) sound = data.get("notification_android_sound");
-                if(data.containsKey("notification_android_vibrate")) vibrate = data.get("notification_android_vibrate");
-                if(data.containsKey("notification_android_light")) light = data.get("notification_android_light"); //String containing hex ARGB color, miliseconds on, miliseconds off, example: '#FFFF00FF,1000,3000'
-                if(data.containsKey("notification_android_color")) color = data.get("notification_android_color");
-                if(data.containsKey("notification_android_icon")) icon = data.get("notification_android_icon");
-                if(data.containsKey("notification_android_visibility")) visibility = data.get("notification_android_visibility");
-                if(data.containsKey("notification_android_priority")) priority = data.get("notification_android_priority");
-                if(data.containsKey("notification_android_image")) image = data.get("notification_android_image");
-                if(data.containsKey("notification_android_image_type")) imageType = data.get("notification_android_image_type");
+            else 
+            {
+                firebasexHandler(remoteMessage);
             }
-
-            if (TextUtils.isEmpty(id)) {
-                Random rand = new Random();
-                int n = rand.nextInt(50) + 1;
-                id = Integer.toString(n);
-            }
-
-            Log.d(TAG, "From: " + remoteMessage.getFrom());
-            Log.d(TAG, "Id: " + id);
-            Log.d(TAG, "Title: " + title);
-            Log.d(TAG, "Body: " + body);
-            Log.d(TAG, "Sound: " + sound);
-            Log.d(TAG, "Vibrate: " + vibrate);
-            Log.d(TAG, "Light: " + light);
-            Log.d(TAG, "Color: " + color);
-            Log.d(TAG, "Icon: " + icon);
-            Log.d(TAG, "Channel Id: " + channelId);
-            Log.d(TAG, "Visibility: " + visibility);
-            Log.d(TAG, "Priority: " + priority);
-            Log.d(TAG, "Image: " + image);
-            Log.d(TAG, "image Type: " + imageType);
-
-
-            if (!TextUtils.isEmpty(body) || !TextUtils.isEmpty(title) || (data != null && !data.isEmpty())) {
-                boolean showNotification = (FirebasePlugin.inBackground() || !FirebasePlugin.hasNotificationsCallback() || foregroundNotification) && (!TextUtils.isEmpty(body) || !TextUtils.isEmpty(title));
-                sendMessage(remoteMessage, data, messageType, id, title, body, bodyHtml, showNotification, sound, vibrate, light, color, icon, channelId, priority, visibility, image, imageType);
-            }
-        }catch (Exception e){
+        catch (Exception e){
             FirebasePlugin.handleExceptionWithoutContext(e);
         }
+    }
+    private void firebasexHandler(RemoteMessage remoteMessage){
+        boolean wasHandled = FirebasePluginMessageReceiverManager.onMessageReceived(remoteMessage);
+                if (wasHandled) {
+                    Log.d(TAG, "Message was handled by a registered receiver");
+
+                    // Don't process the message in this method.
+                    return;
+                }
+
+                if(FirebasePlugin.applicationContext == null){
+                    FirebasePlugin.applicationContext = this.getApplicationContext();
+                }
+
+                // TODO(developer): Handle FCM messages here.
+                // Not getting messages here? See why this may be: https://goo.gl/39bRNJ
+                String messageType;
+                String title = null;
+                String titleLocKey = null;
+                String[] titleLocArgs = null;
+                String body = null;
+                String bodyLocKey = null;
+                String[] bodyLocArgs = null;
+                String bodyHtml = null;
+                String id = null;
+                String sound = null;
+                String vibrate = null;
+                String light = null;
+                String color = null;
+                String icon = null;
+                String channelId = null;
+                String visibility = null;
+                String priority = null;
+                String image = null;
+                String imageType = null;
+                boolean foregroundNotification = false;
+
+                Map<String, String> data = remoteMessage.getData();
+
+                if (remoteMessage.getNotification() != null) {
+                    // Notification message payload
+                    Log.i(TAG, "Received message: notification");
+                    messageType = "notification";
+                    id = remoteMessage.getMessageId();
+                    RemoteMessage.Notification notification = remoteMessage.getNotification();
+                    title = notification.getTitle();
+                    titleLocKey = notification.getTitleLocalizationKey();
+                    titleLocArgs = notification.getTitleLocalizationArgs();
+                    body = notification.getBody();
+                    bodyLocKey = notification.getBodyLocalizationKey();
+                    bodyLocArgs = notification.getBodyLocalizationArgs();
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        channelId = notification.getChannelId();
+                    }
+                    sound = notification.getSound();
+                    color = notification.getColor();
+                    icon = notification.getIcon();
+                    if (notification.getImageUrl() != null) {
+                        image = notification.getImageUrl().toString();
+                    }
+                    if (!TextUtils.isEmpty(titleLocKey)) {
+                        int titleId = getResources().getIdentifier(titleLocKey, "string", getPackageName());
+                        title = String.format(getResources().getString(titleId), (Object[])titleLocArgs);
+                    }
+                    if (!TextUtils.isEmpty(bodyLocKey)) {
+                        int bodyId = getResources().getIdentifier(bodyLocKey, "string", getPackageName());
+                        body = String.format(getResources().getString(bodyId), (Object[])bodyLocArgs);
+                    }
+                }else{
+                    Log.i(TAG, "Received message: data");
+                    messageType = "data";
+                }
+
+                if (data != null) {
+                    // Data message payload
+                    if(data.containsKey("notification_foreground")){
+                        foregroundNotification = true;
+                    }
+                    if(data.containsKey("notification_title")) title = data.get("notification_title");
+                    if(data.containsKey("notification_body")) body = data.get("notification_body");
+                    if(data.containsKey("notification_android_body_html")) bodyHtml = data.get("notification_android_body_html");
+                    if(data.containsKey("notification_android_channel_id")) channelId = data.get("notification_android_channel_id");
+                    if(data.containsKey("notification_android_id")) id = data.get("notification_android_id");
+                    if(data.containsKey("notification_android_sound")) sound = data.get("notification_android_sound");
+                    if(data.containsKey("notification_android_vibrate")) vibrate = data.get("notification_android_vibrate");
+                    if(data.containsKey("notification_android_light")) light = data.get("notification_android_light"); //String containing hex ARGB color, miliseconds on, miliseconds off, example: '#FFFF00FF,1000,3000'
+                    if(data.containsKey("notification_android_color")) color = data.get("notification_android_color");
+                    if(data.containsKey("notification_android_icon")) icon = data.get("notification_android_icon");
+                    if(data.containsKey("notification_android_visibility")) visibility = data.get("notification_android_visibility");
+                    if(data.containsKey("notification_android_priority")) priority = data.get("notification_android_priority");
+                    if(data.containsKey("notification_android_image")) image = data.get("notification_android_image");
+                    if(data.containsKey("notification_android_image_type")) imageType = data.get("notification_android_image_type");
+                }
+
+                if (TextUtils.isEmpty(id)) {
+                    Random rand = new Random();
+                    int n = rand.nextInt(50) + 1;
+                    id = Integer.toString(n);
+                }
+
+                Log.d(TAG, "From: " + remoteMessage.getFrom());
+                Log.d(TAG, "Id: " + id);
+                Log.d(TAG, "Title: " + title);
+                Log.d(TAG, "Body: " + body);
+                Log.d(TAG, "Sound: " + sound);
+                Log.d(TAG, "Vibrate: " + vibrate);
+                Log.d(TAG, "Light: " + light);
+                Log.d(TAG, "Color: " + color);
+                Log.d(TAG, "Icon: " + icon);
+                Log.d(TAG, "Channel Id: " + channelId);
+                Log.d(TAG, "Visibility: " + visibility);
+                Log.d(TAG, "Priority: " + priority);
+                Log.d(TAG, "Image: " + image);
+                Log.d(TAG, "image Type: " + imageType);
+
+
+                if (!TextUtils.isEmpty(body) || !TextUtils.isEmpty(title) || (data != null && !data.isEmpty())) {
+                    boolean showNotification = (FirebasePlugin.inBackground() || !FirebasePlugin.hasNotificationsCallback() || foregroundNotification) && (!TextUtils.isEmpty(body) || !TextUtils.isEmpty(title));
+                    sendMessage(remoteMessage, data, messageType, id, title, body, bodyHtml, showNotification, sound, vibrate, light, color, icon, channelId, priority, visibility, image, imageType);
+                }
+
     }
 
     private void sendMessage(RemoteMessage remoteMessage, Map<String, String> data, String messageType, String id, String title, String body, String bodyHtml, boolean showNotification, String sound, String vibrate, String light, String color, String icon, String channelId, String priority, String visibility, String image, String imageType) {
