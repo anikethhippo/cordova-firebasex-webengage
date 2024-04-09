@@ -141,6 +141,8 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
             {
                 firebasexHandler(remoteMessage);
             }
+            }
+        }
         catch (Exception e){
             FirebasePlugin.handleExceptionWithoutContext(e);
         }
